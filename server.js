@@ -1,83 +1,90 @@
-const express = require("express");
-const app = express();
-const { resolve } = require("path");
-const port = process.env.PORT || 3000;
+// ------------------------------
+// server.js
+// ------------------------------
 
-// importing the dotenv module to use environment variables:
 require("dotenv").config();
+const express = require("express");
+const path = require("path");
+const stripe = require("stripe")(process.env.SECRET_KEY);
 
-const api_key = process.env.SECRET_KEY;
+const app = express();
 
-const stripe = require("stripe")(api_key);
+// ------------------------------
+// Config
+// ------------------------------
+const PORT = process.env.PORT || 3000;
+const DOMAIN = process.env.DOMAIN || `http://localhost:${PORT}`;
+const STATIC_DIR = path.join(__dirname, process.env.STATIC_DIR || "client");
 
-// ------------ Imports & necessary things here ------------
-
-// Setting up the static folder:
-// app.use(express.static(resolve(__dirname, "./client")));
-app.use(express.static(resolve(__dirname, process.env.STATIC_DIR)));
-
+// ------------------------------
+// Middleware
+// ------------------------------
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Serve static files
+app.use(express.static(STATIC_DIR));
+
+// ------------------------------
+// Routes
+// ------------------------------
+
+// Home page
 app.get("/", (req, res) => {
-  const path = resolve(process.env.STATIC_DIR + "/index.html");
-  res.sendFile(path);
+  res.sendFile(path.join(STATIC_DIR, "index.html"));
 });
 
-// creating a route for success page:
+// Success & cancel pages
 app.get("/success", (req, res) => {
-  const path = resolve(process.env.STATIC_DIR + "/success.html");
-  res.sendFile(path);
+  res.sendFile(path.join(STATIC_DIR, "success.html"));
 });
-
-// creating a route for cancel page:
 app.get("/cancel", (req, res) => {
-  const path = resolve(process.env.STATIC_DIR + "/cancel.html");
-  res.sendFile(path);
+  res.sendFile(path.join(STATIC_DIR, "cancel.html"));
 });
 
-// Workshop page routes:
+// Workshop pages
 app.get("/workshop1", (req, res) => {
-  const path = resolve(process.env.STATIC_DIR + "/workshops/workshop1.html");
-  res.sendFile(path);
+  res.sendFile(path.join(STATIC_DIR, "workshops", "workshop1.html"));
 });
 app.get("/workshop2", (req, res) => {
-  const path = resolve(process.env.STATIC_DIR + "/workshops/workshop2.html");
-  res.sendFile(path);
+  res.sendFile(path.join(STATIC_DIR, "workshops", "workshop2.html"));
 });
 app.get("/workshop3", (req, res) => {
-  const path = resolve(process.env.STATIC_DIR + "/workshops/workshop3.html");
-  res.sendFile(path);
+  res.sendFile(path.join(STATIC_DIR, "workshops", "workshop3.html"));
 });
 
-// ____________________________________________________________________________________
-
-const domainURL = process.env.DOMAIN;
+// ------------------------------
+// Stripe checkout
+// ------------------------------
 app.post("/create-checkout-session/:pid", async (req, res) => {
-  
-  const priceId = req.params.pid;
-  
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    success_url: `${domainURL}/success?id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${domainURL}/cancel`,
-    payment_method_types: ["card"],
-    line_items: [
-      {
-        price: priceId,
-        quantity: 1,
-      },
-    ],
-    // allowing the use of promo-codes:
-    allow_promotion_codes: true,
-  });
-  res.json({
-    id: session.id,
-  });
+  try {
+    const priceId = req.params.pid;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      success_url: `${DOMAIN}/success?id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${DOMAIN}/cancel`,
+      allow_promotion_codes: true,
+    });
+
+    res.json({ id: session.id });
+  } catch (err) {
+    console.error("Stripe checkout error:", err);
+    res.status(500).json({ error: "Checkout session creation failed" });
+  }
 });
 
-// Server listening:
-app.listen(port, () => {
-  console.log(`Server listening on port: ${port}`);
-  console.log(`You may access you app at: ${domainURL}`);
+// ------------------------------
+// Start server
+// ------------------------------
+app.listen(PORT, () => {
+  console.log(`Server listening on port: ${PORT}`);
+  console.log(`You may access your app at: ${DOMAIN}`);
 });
